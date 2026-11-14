@@ -2627,6 +2627,8 @@ static HRESULT STDMETHODCALLTYPE d3d12_resource_Map(d3d12_resource_iface *iface,
 
     if (data)
     {
+        if (VKD3D_CONFIG_FLAG_IS_SET(READBACK_MAP_SYNC))
+            vkd3d_readback_sync_wait(&resource->device->readback_sync, resource);
         d3d12_resource_get_map_ptr(resource, data);
         TRACE("Returning pointer %p.\n", *data);
     }
@@ -4029,6 +4031,9 @@ static void d3d12_resource_destroy(struct d3d12_resource *resource, struct d3d12
         d3d12_resource_wait_for_sparse_init(resource);
 
     d3d_destruction_notifier_free(&resource->destruction_notifier);
+
+    if (VKD3D_CONFIG_FLAG_IS_SET(READBACK_MAP_SYNC))
+        vkd3d_readback_sync_forget_resource(&device->readback_sync, resource);
 
     vkd3d_view_map_destroy(&resource->view_map, resource->device);
 

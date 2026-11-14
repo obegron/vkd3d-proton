@@ -779,6 +779,8 @@ static inline bool is_shared_ID3D12Fence(ID3D12Fence *iface)
     return is_shared_ID3D12Fence1((ID3D12Fence1 *)iface);
 }
 
+void d3d12_fence_iface_inc_ref(d3d12_fence_iface *iface);
+void d3d12_fence_iface_dec_ref(d3d12_fence_iface *iface);
 HRESULT d3d12_fence_iface_set_native_sync_handle_on_completion_explicit(ID3D12Fence *iface,
         enum vkd3d_waiting_event_type wait_type, UINT64 value, vkd3d_native_sync_handle handle, uint32_t *payload);
 
@@ -1257,6 +1259,56 @@ static inline struct vkd3d_cookie vkd3d_null_cookie(void)
 }
 
 bool d3d12_resource_is_cpu_accessible(const struct d3d12_resource *resource);
+
+/* Copy into a READBACK buffer, recorded in a command list. */
+struct vkd3d_readback_sync_copy
+{
+    ID3D12CommandList *list;
+    const struct d3d12_resource *resource;
+    uint64_t sequence;
+    bool submitted;
+};
+
+/* Execution of a recorded copy. The fence is set by the next Signal() on the queue. */
+struct vkd3d_readback_sync_submission
+{
+    const struct d3d12_resource *resource;
+    const struct d3d12_command_queue *queue;
+    ID3D12Fence *fence;
+    uint64_t value;
+    uint64_t sequence;
+};
+
+struct vkd3d_readback_sync
+{
+    pthread_mutex_t mutex;
+    condvar_reltime_t cond;
+    uint64_t sequence;
+
+    struct vkd3d_readback_sync_copy *copies;
+    size_t copies_size;
+    size_t copy_count;
+
+    struct vkd3d_readback_sync_submission *submissions;
+    size_t submissions_size;
+    size_t submission_count;
+
+    vkd3d_native_sync_handle *stale_events;
+    size_t stale_events_size;
+    size_t stale_event_count;
+};
+
+HRESULT vkd3d_readback_sync_init(struct vkd3d_readback_sync *sync);
+void vkd3d_readback_sync_cleanup(struct vkd3d_readback_sync *sync);
+void vkd3d_readback_sync_record_copy(struct vkd3d_readback_sync *sync,
+        ID3D12CommandList *list, const struct d3d12_resource *dst);
+void vkd3d_readback_sync_forget_list(struct vkd3d_readback_sync *sync, ID3D12CommandList *list);
+void vkd3d_readback_sync_forget_resource(struct vkd3d_readback_sync *sync, const struct d3d12_resource *resource);
+void vkd3d_readback_sync_submit(struct vkd3d_readback_sync *sync, const struct d3d12_command_queue *queue,
+        ID3D12CommandList * const *command_lists, UINT command_list_count);
+void vkd3d_readback_sync_signal(struct vkd3d_readback_sync *sync, const struct d3d12_command_queue *queue,
+        ID3D12Fence *fence, UINT64 value);
+void vkd3d_readback_sync_wait(struct vkd3d_readback_sync *sync, const struct d3d12_resource *resource);
 void d3d12_resource_promote_desc(const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_DESC1 *desc1);
 HRESULT d3d12_resource_validate_desc(const D3D12_RESOURCE_DESC1 *desc,
         UINT num_castable_formats, const DXGI_FORMAT *castable_formats,
@@ -5879,6 +5931,7 @@ struct d3d12_device
 
     pthread_mutex_t mutex;
     pthread_mutex_t global_submission_mutex;
+    struct vkd3d_readback_sync readback_sync;
     spinlock_t low_latency_swapchain_spinlock;
 
     VkPhysicalDeviceMemoryProperties memory_properties;

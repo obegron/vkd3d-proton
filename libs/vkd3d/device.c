@@ -3926,6 +3926,8 @@ static void d3d12_device_destroy(struct d3d12_device *device)
     vkd3d_meta_ops_cleanup(&device->meta_ops, device);
     vkd3d_bindless_state_cleanup(&device->bindless_state, device);
     d3d12_device_destroy_vkd3d_queues(device);
+    /* Queues are drained, so no fence can signal a stale event anymore. */
+    vkd3d_readback_sync_cleanup(&device->readback_sync);
     VK_CALL(vkDestroySemaphore(device->vk_device, device->sparse_init_timeline, NULL));
     vkd3d_null_rtas_allocation_cleanup(&device->null_rtas_allocation, device);
     vkd3d_memory_allocator_cleanup(&device->memory_allocator, device);
@@ -10629,8 +10631,11 @@ static HRESULT d3d12_device_init(struct d3d12_device *device,
     if (FAILED(hr = vkd3d_private_store_init(&device->private_store)))
         goto out_free_vk_resources;
 
-    if (FAILED(hr = vkd3d_memory_transfer_queue_init(&device->memory_transfers, device)))
+    if (FAILED(hr = vkd3d_readback_sync_init(&device->readback_sync)))
         goto out_free_private_store;
+
+    if (FAILED(hr = vkd3d_memory_transfer_queue_init(&device->memory_transfers, device)))
+        goto out_free_readback_sync;
 
     if (FAILED(hr = vkd3d_memory_allocator_init(&device->memory_allocator, device)))
         goto out_free_memory_transfers;
@@ -10761,6 +10766,8 @@ out_free_memory_allocator:
     vkd3d_memory_allocator_cleanup(&device->memory_allocator, device);
 out_free_memory_transfers:
     vkd3d_memory_transfer_queue_cleanup(&device->memory_transfers);
+out_free_readback_sync:
+    vkd3d_readback_sync_cleanup(&device->readback_sync);
 out_free_private_store:
     vkd3d_private_store_destroy(&device->private_store);
 out_free_vk_resources:

@@ -180,6 +180,8 @@ static const struct vkd3d_instance_application_meta application_override[] = {
     /* EGS alias as well. */
     { VKD3D_STRING_COMPARE_EXACT, "ds.exe", VKD3D_CONFIG_FLAG_STATIC(NO_UPLOAD_HVV) },
     { VKD3D_STRING_COMPARE_EXACT, "DeathStranding.exe", VKD3D_CONFIG_FLAG_STATIC(NO_UPLOAD_HVV) },
+    /* Death Stranding 2 (3280350). Reads READBACK buffers without waiting for the copy into them, causing flickering geometry. */
+    { VKD3D_STRING_COMPARE_EXACT, "DS2.exe", VKD3D_CONFIG_FLAG_STATIC(READBACK_MAP_SYNC) },
     /* AC: Valhalla (2208920). Very ugly use-after-free in some cases. The main culprit seems a sparse resource. */
     { VKD3D_STRING_COMPARE_EXACT, "ACValhalla.exe", VKD3D_CONFIG_FLAG_STATIC(DEFER_RESOURCE_DESTRUCTION) },
     /* Guardians of the Galaxy: Tries to use root descriptors with indirect rendering if it detects an Nvidia GPU. */
